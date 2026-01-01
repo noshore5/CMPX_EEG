@@ -13,3 +13,6 @@ matplotlib
 # ...add any other backend dependencies you use...
 gunicorn
 pyfftw
+pylsl
+websockets
+mne

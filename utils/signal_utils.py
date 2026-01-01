@@ -1,7 +1,7 @@
 import numpy as np
 import pyfftw
 
-def generate_signals(n_signals=1000, length=120, fs=1):
+def generate_signals(n_signals=8, length=120, fs=1):
     t = np.arange(length) / fs
     signals = []
     coherent_pairs = int(round(0.1 * n_signals))  # 10% of pairs will be coherent
@@ -22,17 +22,6 @@ def generate_signals(n_signals=1000, length=120, fs=1):
                 envelope = np.exp(-0.5 * ((t*fs - center)/width)**2)
             sig += amp * envelope * np.sin(2 * np.pi * freq * t + phase)
 
-
-        # Add time-varying noise
-        noise_level = np.random.uniform(0.2, 1.0)
-        noise_envelope = np.random.uniform(0.5, 1.5) * np.sin(2 * np.pi * np.random.uniform(0.01, 0.1) * t) + 1
-        noise = np.random.normal(0, noise_level, size=length) * noise_envelope
-        sig += noise
-        # Randomly drop out signal (simulate silence)
-        if np.random.rand() < 0.2 and length > 1:
-            drop_start = np.random.randint(0, length//2)
-            drop_end = np.random.randint(drop_start+1, length)
-            sig[drop_start:drop_end] = 0
         signals.append(sig)
 
     # Inject coherence into some random pairs (after all signals are created)
@@ -82,12 +71,8 @@ def live_signal_generator(n_signals, fs, buffer_size=2):
         for i in range(n_signals):
             freq, phase, amp = params[i]
             envelope = 1.0
-            noise_level = np.random.uniform(0.2, 1.0)
             for _ in range(buffer_size):
-                noise = np.random.normal(0, noise_level)
-                val = amp * envelope * np.sin(2 * np.pi * freq * t + phase) + noise
-                if np.random.rand() < 0.02:
-                    val = 0.0
+                val = amp * envelope * np.sin(2 * np.pi * freq * t + phase)
                 new_points.append(val)
         signals_buffer = np.roll(signals_buffer, -buffer_size, axis=1)
         signals_buffer[:, -buffer_size:] = np.array(new_points).reshape(n_signals, buffer_size)

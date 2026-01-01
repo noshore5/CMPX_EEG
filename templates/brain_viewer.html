@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Brain Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/110/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.110/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.110/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+
+        #control-panel {
+            width: 50%;
+            background-color: #222;
+            color: #fff;
+            padding: 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        #viewer {
+            width: 50%;
+            height: 100vh;
+        }
+
+        .control-section {
+            margin-bottom: 20px;
+        }
+
+        .control-section h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+
+        .node-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            margin: 4px 0;
+            background-color: #333;
+            border-radius: 5px;
+        }
+
+        .node-label {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        #nodes-container {
+            max-height: 180px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        .lsl-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #444;
+        }
+
+        .lsl-control {
+            display: flex;
+            gap: 8px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .stream-select {
+            padding: 8px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        #active-streams {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .stream-item {
+            background-color: #2a2a2a;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #4CAF50;
+            font-size: 12px;
+        }
+
+        .stream-item-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .stream-item-details {
+            font-size: 11px;
+            color: #aaa;
+            margin-top: 4px;
+        }
+
+        #connection-status {
+            padding: 8px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background-color: #333;
+            border-left: 3px solid #ff9800;
+            font-size: 12px;
+        }
+
+        #connection-status.connected {
+            border-left-color: #4CAF50;
+        }
+
+        #connection-status.error {
+            border-left-color: #f44336;
+        }
+
+        #channels-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #444;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .channel-chart-container {
+            background-color: #2a2a2a;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 4px;
+            border-left: 3px solid #4CAF50;
+        }
+
+        .channel-chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .channel-chart-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #4CAF50;
+            flex: 1;
+        }
+
+        .channel-chart-canvas {
+            max-height: 150px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #444;
+        }
+
+        .tab-button {
+            background-color: transparent;
+            color: #aaa;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 0;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab-button:hover {
+            background-color: #2a2a2a;
+            color: #fff;
+        }
+
+        .tab-button.active {
+            color: #4CAF50;
+            border-bottom-color: #4CAF50;
+            background-color: transparent;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="control-panel">
+        <div class="tabs">
+            <button class="tab-button active" data-tab="stream-control">Stream Control</button>
+            <button class="tab-button" data-tab="output">Frequency Domain</button>
+            <button class="tab-button" data-tab="coherence">Coherence</button>
+        </div>
+
+        <div id="stream-control" class="tab-content active">
+            <div class="control-section">
+                <h2>Stream Control</h2>
+                <div id="connection-status">Not connected</div>
+                
+                <div class="lsl-control">
+                    <button id="discover-streams-btn">Discover Streams</button>
+                    <button id="connect-ws-btn">Connect WebSocket</button>
+                </div>
+
+                <div>
+                    <label for="stream-select" style="font-size: 12px;">Available Streams:</label>
+                    <select id="stream-select" class="stream-select">
+                        <option value="">Select a stream...</option>
+                    </select>
+                    <button id="subscribe-stream-btn" style="width: 100%; margin-top: 8px;">Subscribe</button>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3 style="font-size: 14px; margin-top: 0;">Active Streams:</h3>
+                <div id="active-streams"></div>
+            </div>
+
+            <div id="channels-section" style="display: none;">
+                <div class="control-section">
+                    <h3 style="font-size: 14px; margin-top: 0;">Channel Data:</h3>
+                    <div id="channels-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="output" class="tab-content">
+            <div class="control-section">
+                <h3 style="font-size: 14px; margin-top: 0;">Fourier Spectrum:</h3>
+                <div id="fft-container"></div>
+            </div>
+        </div>
+
+        <div id="coherence" class="tab-content">
+            <div class="control-section">
+                <h3 style="font-size: 14px; margin-top: 0;">Cosine Distance:</h3>
+                <div id="coherence-container"></div>
+            </div>
+        </div>
+    </div>
+    <div id="viewer"></div>
+
+    <script>
+        console.log('Starting Three.js initialization...');
+        
+        // Tab switching functionality
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tabName = e.target.getAttribute('data-tab');
+                
+                // Deactivate all buttons and contents
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                
+                // Activate selected tab
+                e.target.classList.add('active');
+                document.getElementById(tabName).classList.add('active');
+            });
+        });
+        
+        // Declare global variables for node management
+        let labels = [];
+        let spheres = [];
+        let nodeVisibility = {};
+        let activeStreamChannels = new Set();
+        let arcs = []; // Store all arc references
+        let nodeArcs = {}; // Map node label to array of arc indices
+        
+        try {
+            // Set up the scene, camera, and renderer
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, (window.innerWidth / 2) / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth / 2, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('viewer').appendChild(renderer.domElement);
+            console.log('Renderer initialized');
+
+            const canvas = renderer.domElement;
+
+            // Set the background color
+            scene.background = new THREE.Color(0x333333);
+
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 20);
+            scene.add(directionalLight);
+
+            // Load the brain model
+            const loader = new THREE.OBJLoader();
+            loader.load('/static/brain_model.obj', function (object) {
+                const scale = 20 / 167;
+                object.scale.set(scale, scale, scale);
+                object.position.set(0, 0, 5 * scale);
+                object.rotation.x = 0;
+                scene.add(object);
+                console.log('Brain model loaded and scaled');
+            }, undefined, function (error) {
+                console.error('Error loading brain model:', error);
+            });
+
+            // Set camera position
+            camera.position.set(0, -50, 20);
+            camera.lookAt(0, 0, 0);
+            
+            // Flip camera upside down
+            camera.up.set(0, -1, 0);
+
+            // Add OrbitControls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 5;
+            controls.maxDistance = 200;
+            controls.autoRotate = false;
+
+            // Add grid helper
+            const gridHelper = new THREE.GridHelper(60, 60);
+            gridHelper.rotation.x = -Math.PI / 2;
+            gridHelper.position.z = 0;
+            scene.add(gridHelper);
+
+            // Add axes helper
+            const axesHelper = new THREE.AxesHelper(15);
+            scene.add(axesHelper);
+
+            // Store labels and spheres (use global variables declared above)
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            function updateAllLabels() {
+                const canvasRect = canvas.getBoundingClientRect();
+                labels.forEach(label => {
+                    const projected = label.vector.clone().project(camera);
+                    const x = (projected.x * 0.5 + 0.5) * canvasRect.width + canvasRect.left;
+                    const y = (-projected.y * 0.5 + 0.5) * canvasRect.height + canvasRect.top - 30;
+                    label.element.style.left = x + 'px';
+                    label.element.style.top = y + 'px';
+                });
+            }
+
+            // Add EEG nodes - Standard 10-20 System
+            const eegNodes = [
+                { label: 'Fp1', position: [-2, 8, 10.1] },
+                { label: 'Fp2', position: [2, 8, 10.1] },
+                { label: 'F3', position: [-3, 6, 11.5] },
+                { label: 'F4', position: [3, 6, 11.5] },
+                { label: 'Fz', position: [0, 6, 11.5] },
+                { label: 'C3', position: [-4, 0, 12.5] },
+                { label: 'C4', position: [4, 0, 12.5] },
+                { label: 'Cz', position: [0, 0, 12.8] },
+                { label: 'P3', position: [-3, -6, 12] },
+                { label: 'P4', position: [3, -6, 12] },
+                { label: 'Pz', position: [0, -6, 12] },
+                { label: 'T3', position: [-6, 2, 10.5] },
+                { label: 'T4', position: [6, 2, 10.5] },
+                { label: 'T5', position: [-6, -4, 10.5] },
+                { label: 'T6', position: [6, -4, 10.5] },
+                { label: 'O1', position: [-2, -9, 10] },
+                { label: 'O2', position: [2, -9, 10] },
+                { label: 'Oz', position: [0, -9, 10] },
+            ];
+
+            const sphereGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+            const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+
+            // Initialize global node visibility tracking
+            // nodeVisibility and activeStreamChannels already declared globally above
+
+            eegNodes.forEach(node => {
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(node.position[0], node.position[1], node.position[2]);
+                scene.add(sphere);
+                spheres.push(sphere);
+                sphere.visible = false; // Hide nodes by default until a stream is subscribed
+                nodeVisibility[node.label] = true;
+
+                // Create label
+                const div = document.createElement('div');
+                div.style.position = 'absolute';
+                div.style.color = 'white';
+                div.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.fontSize = '12px';
+                div.style.fontWeight = 'bold';
+                div.style.whiteSpace = 'nowrap';
+                div.style.display = 'none';
+                div.style.pointerEvents = 'none';
+                div.innerHTML = node.label;
+                document.body.appendChild(div);
+
+                labels.push({
+                    element: div,
+                    vector: new THREE.Vector3(node.position[0], node.position[1], node.position[2]),
+                    sphere: sphere,
+                    label: node.label
+                });
+            });
+
+            // Create arcs connecting every pair of nodes
+            const arcMaterial = new THREE.LineBasicMaterial({ color: 0x888888, linewidth: 1 });
+            
+            // Initialize nodeArcs mapping
+            eegNodes.forEach(node => {
+                nodeArcs[node.label] = [];
+            });
+            
+            for (let i = 0; i < eegNodes.length; i++) {
+                for (let j = i + 1; j < eegNodes.length; j++) {
+                    const node1 = eegNodes[i];
+                    const node2 = eegNodes[j];
+                    
+                    // Create a curve between the two nodes
+                    const start = new THREE.Vector3(node1.position[0], node1.position[1], node1.position[2]);
+                    const end = new THREE.Vector3(node2.position[0], node2.position[1], node2.position[2]);
+                    const mid = new THREE.Vector3();
+                    mid.addVectors(start, end).multiplyScalar(0.5);
+                    
+                    // Raise the midpoint along the Z axis
+                    const bulgeDistance = start.distanceTo(end) * 0.50;
+                    mid.z += bulgeDistance;
+                    
+                    // Create quadratic bezier curve
+                    const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+                    
+                    // Create tube geometry with initial radius
+                    const initialRadius = 0.05;
+                    const tubeGeometry = new THREE.TubeGeometry(curve, 20, initialRadius, 8, false);
+                    const tubeMaterial = new THREE.MeshStandardMaterial({ 
+                        color: 0x444444,
+                        emissive: 0x000000,
+                        metalness: 0.3,
+                        roughness: 0.4
+                    });
+                    const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+                    tube.visible = false; // Hide arcs until nodes appear
+                    
+                    scene.add(tube);
+                    
+                    // Track arc and its connected nodes
+                    const arcIndex = arcs.length;
+                    arcs.push({
+                        line: tube,
+                        mesh: tube,
+                        nodes: [node1.label, node2.label],
+                        material: tubeMaterial,
+                        curve: curve,
+                        cosineSimilarity: 0 // Initialize similarity value
+                    });
+                    
+                    // Map both nodes to this arc
+                    nodeArcs[node1.label].push(arcIndex);
+                    nodeArcs[node2.label].push(arcIndex);
+                }
+            }
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                updateAllLabels();
+                renderer.render(scene, camera);
+            }
+            console.log('Starting animation loop...');
+            animate();
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = (window.innerWidth / 2) / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth / 2, window.innerHeight);
+                updateAllLabels();
+            });
+
+            // Handle mouse move for label visibility
+            document.addEventListener('mousemove', (event) => {
+                const canvasRect = canvas.getBoundingClientRect();
+                if (event.clientX < canvasRect.left || event.clientX > canvasRect.right ||
+                    event.clientY < canvasRect.top || event.clientY > canvasRect.bottom) {
+                    return;
+                }
+
+                mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+                mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(spheres);
+
+                labels.forEach(label => {
+                    label.element.style.display = 'none';
+                });
+
+                if (intersects.length > 0) {
+                    const hoveredSphere = intersects[0].object;
+                    labels.forEach(label => {
+                        if (label.sphere === hoveredSphere && nodeVisibility[label.label]) {
+                            label.element.style.display = 'block';
+                        }
+                    });
+                }
+            });
+        } catch (err) {
+            console.error('Error in Three.js setup:', err);
+        }
+
+        // ========== LSL Stream Management ==========
+        let websocket = null;
+        let availableStreams = [];
+        const activeStreamData = {};
+        const streamCharts = {}; // { streamName -> { channelName -> chart } }
+        const streamFFTCharts = {}; // { streamName -> { channelName -> chart } } for FFT visualization
+        const coherenceChart = {}; // { streamName -> chart } for coherence analysis
+        const fftBuffers = {}; // { streamName -> { channelName -> [fft_magnitudes] } } for coherence computation
+        const channelBuffers = {}; // { streamName -> { channelName -> [samples] } }
+        const BUFFER_SIZE = 500; // Keep last 500 samples
+        let selectedStream = null; // Track the currently selected stream
+        let selectedStreamChannelCount = 0; // Track selected stream's channel count
+        let currentlySubscribedStream = null; // Track the currently subscribed stream (only one allowed)
+        const streamChannelMap = {}; // Map streamName -> channel names for managing node visibility
+        let lastDisplayUpdateTime = 0; // Track last time we updated the active streams display
+        const DISPLAY_UPDATE_INTERVAL = 100; // Update display every 100ms for smooth second display
+        
+        // Sample rate tracking
+        const sampleRateTracking = {}; // { streamName -> { sampleCount, startTime, displayRate } }
+        
+        function trackSampleRate(streamName, sampleCount) {
+            if (!sampleRateTracking[streamName]) {
+                sampleRateTracking[streamName] = {
+                    sampleCount: 0,
+                    startTime: Date.now(),
+                    displayRate: 0
+                };
+            }
+            
+            const tracker = sampleRateTracking[streamName];
+            tracker.sampleCount += sampleCount;
+            
+            const elapsed = (Date.now() - tracker.startTime) / 1000; // Convert to seconds
+            if (elapsed >= 1) {
+                tracker.displayRate = (tracker.sampleCount / elapsed).toFixed(2);
+                console.log(`${streamName} sample rate: ${tracker.displayRate} Hz`);
+                tracker.sampleCount = 0;
+                tracker.startTime = Date.now();
+            }
+            
+            return tracker.displayRate;
+        }
+        
+        // Note: nodeVisibility, activeStreamChannels, spheres, and labels are declared globally above
+
+        function initializeChannelCharts(streamName, channels, channelCount) {
+            try {
+                if (!streamCharts[streamName]) {
+                    streamCharts[streamName] = {};
+                    channelBuffers[streamName] = {};
+                }
+                
+                const container = document.getElementById('channels-container');
+                
+                // Clear existing charts for this stream
+                const existingCharts = container.querySelectorAll(`[data-stream="${streamName}"]`);
+                existingCharts.forEach(el => el.remove());
+                
+                // Initialize buffers and create charts
+                const numChannels = channelCount || channels.length;
+                const useCustomLabels = channels && channels.length > 0;
+                
+                for (let i = 0; i < numChannels; i++) {
+                    const channelLabel = useCustomLabels ? channels[i] : `Ch${i + 1}`;
+                    channelBuffers[streamName][channelLabel] = [];
+                    
+                    // Create container for this channel
+                    const chartDiv = document.createElement('div');
+                    chartDiv.className = 'channel-chart-container';
+                    chartDiv.setAttribute('data-stream', streamName);
+                    chartDiv.setAttribute('data-channel', channelLabel);
+                    
+                    // Create header with title and toggle
+                    const header = document.createElement('div');
+                    header.className = 'channel-chart-header';
+                    
+                    const title = document.createElement('div');
+                    title.className = 'channel-chart-title';
+                    title.textContent = `${streamName} - ${channelLabel}`;
+                    
+                    // Create toggle switch
+                    const toggleSwitch = document.createElement('label');
+                    toggleSwitch.className = 'toggle-switch';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = true;
+                    const slider = document.createElement('span');
+                    slider.className = 'slider';
+                    
+                    checkbox.addEventListener('change', (e) => {
+                        nodeVisibility[channelLabel] = e.target.checked;
+                        console.log(`Toggle ${channelLabel}: ${e.target.checked}`);
+                        // Update corresponding sphere visibility
+                        spheres.forEach((sphere, idx) => {
+                            if (labels[idx] && labels[idx].label === channelLabel) {
+                                sphere.visible = e.target.checked && activeStreamChannels.has(channelLabel);
+                                console.log(`Updated node ${channelLabel} visibility to ${sphere.visible}`);
+                            }
+                        });
+                        // Update visibility of arcs connected to this node
+                        if (nodeArcs[channelLabel]) {
+                            nodeArcs[channelLabel].forEach(arcIndex => {
+                                const arc = arcs[arcIndex];
+                                // Arc is visible only if both connected nodes are visible
+                                const node1Visible = nodeVisibility[arc.nodes[0]] && activeStreamChannels.has(arc.nodes[0]);
+                                const node2Visible = nodeVisibility[arc.nodes[1]] && activeStreamChannels.has(arc.nodes[1]);
+                                arc.line.visible = node1Visible && node2Visible;
+                            });
+                        }
+                    });
+                    
+                    toggleSwitch.appendChild(checkbox);
+                    toggleSwitch.appendChild(slider);
+                    
+                    header.appendChild(title);
+                    header.appendChild(toggleSwitch);
+                    chartDiv.appendChild(header);
+                    
+                    const canvasContainer = document.createElement('div');
+                    canvasContainer.style.position = 'relative';
+                    canvasContainer.style.height = '120px';
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'channel-chart-canvas';
+                    canvasContainer.appendChild(canvas);
+                    
+                    chartDiv.appendChild(canvasContainer);
+                    container.appendChild(chartDiv);
+                    
+                    // Create Chart.js instance
+                    const ctx = canvas.getContext('2d');
+                    streamCharts[streamName][channelLabel] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: channelLabel,
+                                data: [],
+                                borderColor: '#4CAF50',
+                                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                borderWidth: 1,
+                                fill: true,
+                                tension: 0.1,
+                                pointRadius: 0,
+                                pointHoverRadius: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    display: false
+                                },
+                                y: {
+                                    beginAtZero: false,
+                                    title: {
+                                        display: false
+                                    },
+                                    ticks: {
+                                        color: '#aaa',
+                                        font: { size: 10 }
+                                    },
+                                    grid: {
+                                        color: '#444'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                document.getElementById('channels-section').style.display = 'block';
+            } catch (err) {
+                console.error('Error initializing channel charts:', err);
+            }
+        }
+
+        function initializeFFTCharts(streamName, channels, channelCount) {
+            try {
+                if (!streamFFTCharts[streamName]) {
+                    streamFFTCharts[streamName] = {};
+                }
+                
+                const container = document.getElementById('fft-container');
+                
+                // Clear existing FFT charts for this stream
+                const existingCharts = container.querySelectorAll(`[data-stream="${streamName}"]`);
+                existingCharts.forEach(el => el.remove());
+                
+                const numChannels = channelCount || channels.length;
+                const useCustomLabels = channels && channels.length > 0;
+                
+                for (let i = 0; i < numChannels; i++) {
+                    const channelLabel = useCustomLabels ? channels[i] : `Ch${i + 1}`;
+                    
+                    // Create container for this FFT chart
+                    const chartDiv = document.createElement('div');
+                    chartDiv.className = 'channel-chart-container';
+                    chartDiv.setAttribute('data-stream', streamName);
+                    chartDiv.setAttribute('data-channel', channelLabel);
+                    
+                    const title = document.createElement('div');
+                    title.className = 'channel-chart-title';
+                    title.textContent = `${streamName} - ${channelLabel} (FFT)`;
+                    chartDiv.appendChild(title);
+                    
+                    const canvasContainer = document.createElement('div');
+                    canvasContainer.style.position = 'relative';
+                    canvasContainer.style.height = '120px';
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'channel-chart-canvas';
+                    canvasContainer.appendChild(canvas);
+                    chartDiv.appendChild(canvasContainer);
+                    container.appendChild(chartDiv);
+                    
+                    // Create Chart.js instance for FFT
+                    const ctx = canvas.getContext('2d');
+                    streamFFTCharts[streamName][channelLabel] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: `${channelLabel} FFT`,
+                                data: [],
+                                borderColor: '#4CAF50',
+                                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                borderWidth: 1,
+                                tension: 0,
+                                fill: true,
+                                pointRadius: 0,
+                                pointHoverRadius: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 0 },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: false
+                                    },
+                                    ticks: {
+                                        color: '#aaa',
+                                        font: { size: 9 },
+                                        maxTicksLimit: 8
+                                    },
+                                    grid: {
+                                        color: '#444'
+                                    }
+                                },
+                                y: {
+                                    title: {
+                                        display: false
+                                    },
+                                    beginAtZero: true,
+                                    ticks: {
+                                        color: '#aaa',
+                                        font: { size: 10 }
+                                    },
+                                    grid: {
+                                        color: '#444'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Error initializing FFT charts:', err);
+            }
+        }
+
+        function cosineSimilarity(vec1, vec2) {
+            // Compute cosine similarity between two frequency domain vectors
+            if (!vec1 || !vec2 || vec1.length === 0 || vec2.length === 0) return 0;
+            
+            const len = Math.min(vec1.length, vec2.length);
+            let dotProduct = 0;
+            let mag1 = 0;
+            let mag2 = 0;
+            
+            for (let i = 0; i < len; i++) {
+                dotProduct += vec1[i] * vec2[i];
+                mag1 += vec1[i] * vec1[i];
+                mag2 += vec2[i] * vec2[i];
+            }
+            
+            mag1 = Math.sqrt(mag1);
+            mag2 = Math.sqrt(mag2);
+            
+            if (mag1 === 0 || mag2 === 0) return 0;
+            return dotProduct / (mag1 * mag2);
+        }
+
+        function updateArcBrightness(arcIndex, normalizedSimilarity) {
+            // Update arc brightness and size based on cosine similarity value
+            // normalizedSimilarity should be between 0 and 1
+            if (arcIndex < 0 || arcIndex >= arcs.length) return;
+            
+            const arc = arcs[arcIndex];
+            const mesh = arc.mesh;
+            const material = arc.material;
+            
+            // Store the normalized similarity value
+            arc.cosineSimilarity = normalizedSimilarity;
+            
+            // Map similarity to radius: 0.03 at low similarity, 0.15 at high similarity
+            const minRadius = 0.03;
+            const maxRadius = 0.15;
+            const radius = minRadius + (normalizedSimilarity * (maxRadius - minRadius));
+            
+            // Recreate the tube geometry with the new radius
+            const newTubeGeometry = new THREE.TubeGeometry(arc.curve, 20, radius, 8, false);
+            
+            // Dispose of the old geometry to free memory
+            mesh.geometry.dispose();
+            
+            // Update the mesh with the new geometry
+            mesh.geometry = newTubeGeometry;
+            
+            // Create greyscale color: grey when low similarity, white when high similarity
+            // Use HSL with saturation = 0 for pure greyscale
+            // Lightness: 0.25 (dark grey) at 0 similarity, 0.95 (white) at 1 similarity
+            const saturation = 0; // 0 saturation = greyscale
+            const lightness = 0.25 + (normalizedSimilarity * 0.7); // 0.25 -> 0.95
+            
+            const color = new THREE.Color();
+            color.setHSL(0, saturation, lightness); // Hue doesn't matter when saturation is 0
+            
+            material.color.copy(color);
+            material.emissive.copy(color);
+            material.emissive.multiplyScalar(0.3); // Slight emissive glow based on similarity
+            
+            // Force Three.js to update the material
+            material.needsUpdate = true;
+        }
+
+        function updateAllArcBrightness(streamName) {
+            // Update all arc brightness values based on current FFT similarities
+            if (!fftBuffers[streamName] || !coherenceChart[streamName]) return;
+            
+            const chart = coherenceChart[streamName];
+            const pairs = chart._pairs;
+            const ffts = fftBuffers[streamName];
+            
+            // Compute cosine similarity for each pair
+            const similarities = pairs.map(([ch1, ch2]) => {
+                if (ffts[ch1] && ffts[ch2]) {
+                    return cosineSimilarity(ffts[ch1], ffts[ch2]);
+                }
+                return 0;
+            });
+            
+            // Normalize to highest value to highlight differences
+            const maxSimilarity = Math.max(...similarities);
+            const normalizedSimilarities = maxSimilarity > 0 
+                ? similarities.map(s => s / maxSimilarity)
+                : similarities;
+            
+            // Update each arc's brightness
+            pairs.forEach((pair, pairIndex) => {
+                const [ch1, ch2] = pair;
+                // Find the arc that connects these two channels
+                const arcIndex = arcs.findIndex(arc => 
+                    (arc.nodes[0] === ch1 && arc.nodes[1] === ch2) ||
+                    (arc.nodes[0] === ch2 && arc.nodes[1] === ch1)
+                );
+                
+                if (arcIndex !== -1) {
+                    updateArcBrightness(arcIndex, normalizedSimilarities[pairIndex]);
+                }
+            });
+        }
+
+        function initializeCoherenceChart(streamName, channels) {
+            try {
+                const container = document.getElementById('coherence-container');
+                
+                // Clear existing coherence chart
+                const existing = container.querySelector(`[data-stream="${streamName}"]`);
+                if (existing) existing.remove();
+                
+                // Create container
+                const chartDiv = document.createElement('div');
+                chartDiv.setAttribute('data-stream', streamName);
+                chartDiv.style.width = '100%';
+                chartDiv.style.height = '300px';
+                chartDiv.style.marginTop = '10px';
+                
+                const canvas = document.createElement('canvas');
+                chartDiv.appendChild(canvas);
+                container.appendChild(chartDiv);
+                
+                // Generate pair labels
+                const pairs = [];
+                const pairLabels = [];
+                for (let i = 0; i < channels.length; i++) {
+                    for (let j = i + 1; j < channels.length; j++) {
+                        pairs.push([channels[i], channels[j]]);
+                        pairLabels.push(`${channels[i]}-${channels[j]}`);
+                    }
+                }
+                
+                // Create bar chart
+                const ctx = canvas.getContext('2d');
+                coherenceChart[streamName] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: pairLabels,
+                        datasets: [{
+                            label: 'Cosine Similarity',
+                            data: new Array(pairLabels.length).fill(0),
+                            backgroundColor: 'rgba(76, 175, 80, 0.7)',
+                            borderColor: '#4CAF50',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 1,
+                                title: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#aaa',
+                                    font: { size: 10 }
+                                },
+                                grid: {
+                                    color: '#444'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#aaa',
+                                    font: { size: 9 }
+                                },
+                                grid: {
+                                    color: '#444'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Store pair information for updates
+                coherenceChart[streamName]._pairLabels = pairLabels;
+                coherenceChart[streamName]._pairs = pairs;
+            } catch (err) {
+                console.error('Error initializing coherence chart:', err);
+            }
+        }
+
+        function updateCoherenceChart(streamName) {
+            try {
+                if (!coherenceChart[streamName] || !fftBuffers[streamName]) return;
+                
+                const chart = coherenceChart[streamName];
+                const pairs = chart._pairs;
+                const ffts = fftBuffers[streamName];
+                
+                // Compute cosine similarity for each pair
+                const similarities = pairs.map(([ch1, ch2]) => {
+                    if (ffts[ch1] && ffts[ch2]) {
+                        return cosineSimilarity(ffts[ch1], ffts[ch2]);
+                    }
+                    return 0;
+                });
+                
+                // Normalize to highest value to highlight differences
+                const maxSimilarity = Math.max(...similarities);
+                const normalizedSimilarities = maxSimilarity > 0 
+                    ? similarities.map(s => s / maxSimilarity)
+                    : similarities;
+                
+                chart.data.datasets[0].data = normalizedSimilarities;
+                chart.update('none');
+                
+                // Update arc brightness based on cosine similarities
+                updateAllArcBrightness(streamName);
+            } catch (err) {
+                console.error('Error updating coherence chart:', err);
+            }
+        }
+
+        function updateFFTDisplay(streamName, fftData) {
+            // FFT is now computed on the backend, just display it
+            try {
+                if (!streamFFTCharts[streamName]) return;
+                if (!fftData) return;
+                
+                const channels = Object.keys(streamFFTCharts[streamName]);
+                
+                // Initialize FFT buffers if needed
+                if (!fftBuffers[streamName]) {
+                    fftBuffers[streamName] = {};
+                }
+                
+                // Update each channel's FFT chart
+                channels.forEach((channelLabel) => {
+                    if (fftData[channelLabel]) {
+                        const fftResult = fftData[channelLabel];
+                        const freqs = fftResult.frequencies.map(f => f.toFixed(1));
+                        const magnitudes = fftResult.magnitudes;
+                        
+                        if (freqs.length > 0) {
+                            const chart = streamFFTCharts[streamName][channelLabel];
+                            chart.data.labels = freqs;
+                            chart.data.datasets[0].data = magnitudes;
+                            chart.update('none');
+                            
+                            // Store FFT magnitudes for coherence computation
+                            fftBuffers[streamName][channelLabel] = magnitudes;
+                        }
+                    }
+                });
+                
+                // Update coherence chart if it exists
+                if (coherenceChart[streamName]) {
+                    updateCoherenceChart(streamName);
+                }
+            } catch (err) {
+                console.error('Error updating FFT display:', err);
+            }
+        }
+
+        function updateWaveletCoherenceDisplay(streamName, waveletData) {
+            // Display wavelet coherence for the highest similarity pair using Plotly
+            try {
+                console.log('updateWaveletCoherenceDisplay called for:', streamName, waveletData);
+                
+                const container = document.getElementById('coherence-container');
+                if (!container) {
+                    console.error('coherence-container not found');
+                    return;
+                }
+                
+                // Find or create wavelet coherence div
+                let waveletDiv = container.querySelector(`[data-wavelet-stream="${streamName}"]`);
+                
+                if (!waveletDiv) {
+                    console.log('Creating new wavelet div for stream:', streamName);
+                    waveletDiv = document.createElement('div');
+                    waveletDiv.setAttribute('data-wavelet-stream', streamName);
+                    waveletDiv.style.marginTop = '20px';
+                    waveletDiv.style.borderTop = '1px solid #555';
+                    waveletDiv.style.paddingTop = '15px';
+                    
+                    const title = document.createElement('h4');
+                    title.setAttribute('data-wavelet-title', streamName);
+                    title.style.margin = '0 0 10px 0';
+                    title.style.color = '#4CAF50';
+                    title.style.fontSize = '13px';
+                    title.textContent = 'Wavelet Coherence (Highest Similarity Pair):';
+                    
+                    const plotDiv = document.createElement('div');
+                    plotDiv.setAttribute('data-wavelet-plot', streamName);
+                    plotDiv.style.width = '100%';
+                    plotDiv.style.height = '250px';
+                    plotDiv.style.backgroundColor = '#333';
+                    plotDiv.style.borderRadius = '4px';
+                    
+                    waveletDiv.appendChild(title);
+                    waveletDiv.appendChild(plotDiv);
+                    container.appendChild(waveletDiv);
+                    console.log('Wavelet div created and appended');
+                }
+                
+                // Update title with pair info
+                const titleDiv = container.querySelector(`[data-wavelet-title="${streamName}"]`);
+                if (titleDiv) {
+                    titleDiv.textContent = `Wavelet Coherence: ${waveletData.pair} (Similarity: ${waveletData.cosine_similarity.toFixed(3)})`;
+                }
+                
+                // Plot heatmap using Plotly
+                if (waveletData.coherence && waveletData.freqs) {
+                    renderWaveletCoherenceHeatmap(streamName, waveletData);
+                } else {
+                    console.warn('Missing coherence or freqs data:', {
+                        hasCoherence: !!waveletData.coherence,
+                        hasFreqs: !!waveletData.freqs
+                    });
+                }
+            } catch (err) {
+                console.error('Error updating wavelet coherence display:', err);
+            }
+        }
+
+        function renderWaveletCoherenceHeatmap(streamName, waveletData) {
+            // Render wavelet coherence as a heatmap using Plotly
+            try {
+                const plotDiv = document.querySelector(`[data-wavelet-plot="${streamName}"]`);
+                if (!plotDiv) {
+                    console.error('Plot div not found for stream:', streamName);
+                    return;
+                }
+                
+                console.log('Rendering wavelet coherence for:', streamName);
+                console.log('Data structure:', {
+                    pair: waveletData.pair,
+                    hasCoh: !!waveletData.coherence,
+                    cohLength: waveletData.coherence ? waveletData.coherence.length : 0,
+                    cohFirstRow: waveletData.coherence && waveletData.coherence.length > 0 ? waveletData.coherence[0].length : 0,
+                    hasFreqs: !!waveletData.freqs,
+                    freqsLength: waveletData.freqs ? waveletData.freqs.length : 0
+                });
+                
+                const coherenceMatrix = waveletData.coherence;
+                const freqs = waveletData.freqs;
+                
+                if (!coherenceMatrix || !freqs || coherenceMatrix.length === 0) {
+                    console.error('Invalid data for wavelet coherence:', {coherenceMatrix, freqs});
+                    return;
+                }
+                
+                // Create time axis based on second dimension (time steps)
+                // coherenceMatrix[freqIndex][timeIndex]
+                const timeSteps = coherenceMatrix[0] ? coherenceMatrix[0].length : 100;
+                const FS = 128; // Sampling frequency
+                const timeAxis = Array.from({length: timeSteps}, (_, i) => (i / FS) * 100);
+                
+                console.log('Computed axes:', {
+                    timeSteps: timeSteps,
+                    frequencyBins: coherenceMatrix.length,
+                    freqLength: freqs.length,
+                    timeAxisLength: timeAxis.length
+                });
+                
+                // Create heatmap trace
+                const traces = [{
+                    z: coherenceMatrix,
+                    x: timeAxis,
+                    y: freqs,
+                    type: 'heatmap',
+                    colorscale: 'Jet',
+                    hoverongaps: false,
+                    colorbar: {
+                        title: 'Coherence',
+                        titlefont: {color: '#aaa'},
+                        tickfont: {color: '#aaa'}
+                    },
+                    showscale: true
+                }];
+                
+                // Layout configuration matching coherentmultiplex style
+                const layout = {
+                    margin: {l: 60, r: 80, t: 20, b: 60},
+                    paper_bgcolor: '#333',
+                    plot_bgcolor: '#333',
+                    font: {color: '#aaa', family: 'Arial, sans-serif'},
+                    xaxis: {
+                        title: 'Time (centiseconds)',
+                        titlefont: {color: '#aaa'},
+                        tickfont: {color: '#aaa'},
+                        gridcolor: '#444',
+                        zerolinecolor: '#666'
+                    },
+                    yaxis: {
+                        title: 'Frequency (Hz)',
+                        titlefont: {color: '#aaa'},
+                        tickfont: {color: '#aaa'},
+                        gridcolor: '#444',
+                        zerolinecolor: '#666'
+                    }
+                };
+                
+                console.log('About to call Plotly.newPlot');
+                Plotly.newPlot(plotDiv, traces, layout, {responsive: true});
+                console.log('Plotly plot rendered successfully');
+            } catch (err) {
+                console.error('Error rendering heatmap:', err);
+                console.error('Stack:', err.stack);
+            }
+        }
+
+        function updateChannelData(streamName, data) {
+            try {
+                if (!streamCharts[streamName]) return;
+                
+                const channels = Object.keys(streamCharts[streamName]);
+                
+                // Add new sample to each channel buffer
+                channels.forEach((channelLabel, index) => {
+                    if (index < data.length) {
+                        const value = data[index];
+                        channelBuffers[streamName][channelLabel].push(value);
+                        
+                        // Keep buffer size under limit
+                        if (channelBuffers[streamName][channelLabel].length > BUFFER_SIZE) {
+                            channelBuffers[streamName][channelLabel].shift();
+                        }
+                        
+                        // Update chart
+                        const chart = streamCharts[streamName][channelLabel];
+                        chart.data.labels = channelBuffers[streamName][channelLabel].map((_, i) => i);
+                        chart.data.datasets[0].data = channelBuffers[streamName][channelLabel];
+                        chart.update('none'); // No animation for real-time responsiveness
+                    }
+                });
+                
+                // Also update FFT display
+                updateFFTDisplay(streamName, data);
+            } catch (err) {
+                console.error('Error updating channel data:', err);
+            }
+        }
+
+        function updateStatus(message, isError) {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.textContent = message;
+            statusEl.className = isError ? 'error' : 'connected';
+        }
+
+        function updateNodesForStream(streamName, channels) {
+            try {
+                console.log('Updating nodes for stream:', streamName, 'with channels:', channels);
+                
+                // Clear previous stream channels
+                activeStreamChannels.clear();
+                
+                // Add channels from this stream to the active set
+                if (channels && Array.isArray(channels)) {
+                    channels.forEach(ch => {
+                        activeStreamChannels.add(ch);
+                        console.log('Added channel:', ch);
+                    });
+                }
+                
+                console.log('Active stream channels set:', Array.from(activeStreamChannels));
+                console.log('Total spheres:', spheres.length, 'Total labels:', labels.length);
+                
+                // Update sphere visibility based on active stream channels
+                spheres.forEach((sphere, idx) => {
+                    if (labels[idx]) {
+                        const nodeLabel = labels[idx].label;
+                        const hasChannel = activeStreamChannels.has(nodeLabel);
+                        const toggleEnabled = nodeVisibility[nodeLabel];
+                        const shouldBeVisible = hasChannel && toggleEnabled;
+                        
+                        console.log(`Node ${nodeLabel}: hasChannel=${hasChannel}, toggleEnabled=${toggleEnabled}, visible=${shouldBeVisible}`);
+                        sphere.visible = shouldBeVisible;
+                    }
+                });
+                
+                // Update arc visibility based on connected nodes
+                arcs.forEach(arc => {
+                    const node1Visible = nodeVisibility[arc.nodes[0]] && activeStreamChannels.has(arc.nodes[0]);
+                    const node2Visible = nodeVisibility[arc.nodes[1]] && activeStreamChannels.has(arc.nodes[1]);
+                    arc.line.visible = node1Visible && node2Visible;
+                });
+            } catch (err) {
+                console.error('Error updating nodes for stream:', err);
+            }
+        }
+
+        document.getElementById('discover-streams-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/lsl/discover');
+                const data = await response.json();
+                availableStreams = data.streams;
+                
+                const selectEl = document.getElementById('stream-select');
+                selectEl.innerHTML = '<option value="">Select a stream...</option>';
+                
+                availableStreams.forEach((stream) => {
+                    const option = document.createElement('option');
+                    option.value = stream.name;
+                    option.textContent = stream.name + ' (' + stream.type + ', ' + stream.channel_count + ' ch)';
+                    selectEl.appendChild(option);
+                });
+                
+                if (availableStreams.length > 0) {
+                    updateStatus('Found ' + availableStreams.length + ' stream(s)', false);
+                } else {
+                    updateStatus('No streams found', true);
+                }
+            } catch (err) {
+                updateStatus('Discovery error: ' + err.message, true);
+            }
+        });
+
+        document.getElementById('stream-select').addEventListener('change', (e) => {
+            const streamName = e.target.value;
+            if (streamName) {
+                // Find the stream info
+                const streamInfo = availableStreams.find(s => s.name === streamName);
+                if (streamInfo) {
+                    selectedStream = streamName;
+                    selectedStreamChannelCount = streamInfo.channel_count;
+                }
+            } else {
+                selectedStream = null;
+                selectedStreamChannelCount = 0;
+            }
+        });
+
+        document.getElementById('connect-ws-btn').addEventListener('click', () => {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+                updateStatus('WebSocket disconnected', false);
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = protocol + '//' + window.location.host + '/ws/lsl';
+            
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onopen = () => {
+                updateStatus('WebSocket connected', false);
+                document.getElementById('connect-ws-btn').textContent = 'Disconnect WebSocket';
+            };
+            
+            websocket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                // Handle subscription confirmation
+                if (message.status === 'connected' || message.status === 'already_connected') {
+                    // If switching from a different stream, clean up old data
+                    if (currentlySubscribedStream && currentlySubscribedStream !== message.stream) {
+                        delete activeStreamData[currentlySubscribedStream];
+                        delete streamCharts[currentlySubscribedStream];
+                        delete channelBuffers[currentlySubscribedStream];
+                        // Clear old charts from DOM
+                        const container = document.getElementById('channels-container');
+                        const oldCharts = container.querySelectorAll(`[data-stream="${currentlySubscribedStream}"]`);
+                        oldCharts.forEach(el => el.remove());
+                    }
+                    
+                    // Set as currently subscribed stream
+                    currentlySubscribedStream = message.stream;
+                    
+                    activeStreamData[message.stream] = {
+                        data: [],
+                        timestamp: null,
+                        channel_count: message.channel_count,
+                        channels: message.channels
+                    };
+                    // Initialize charts when subscribing
+                    initializeChannelCharts(message.stream, message.channels, message.channel_count);
+                    initializeFFTCharts(message.stream, message.channels, message.channel_count);
+                    initializeCoherenceChart(message.stream, message.channels);
+                    // Update node visibility for the subscribed stream
+                    updateNodesForStream(message.stream, message.channels);
+                    updateActiveStreamsDisplay();
+                    updateStatus('Connected to: ' + message.stream, false);
+                } 
+                // Handle data messages
+                else if (message.type === 'data' && message.data) {
+                    if (!activeStreamData[message.stream]) {
+                        activeStreamData[message.stream] = {};
+                    }
+                    activeStreamData[message.stream].data = message.data;
+                    activeStreamData[message.stream].timestamp = message.timestamp;
+                    activeStreamData[message.stream].channel_count = message.channel_count;
+                    activeStreamData[message.stream].channels = message.channels;
+                    
+                    // Track actual sample rate (count data points received)
+                    const rate = trackSampleRate(message.stream, message.data.length);
+                    
+                    // Debounce display updates - only update every 500ms to avoid excessive DOM updates
+                    const now = Date.now();
+                    if (now - lastDisplayUpdateTime > DISPLAY_UPDATE_INTERVAL) {
+                        updateActiveStreamsDisplay();
+                        lastDisplayUpdateTime = now;
+                    }
+                    
+                    updateChannelData(message.stream, message.data);
+                    updateNodeVisualization(message.stream, message.data);
+                }
+                // Handle FFT data messages (computed on backend)
+                else if (message.type === 'fft' && message.fft) {
+                    updateFFTDisplay(message.stream, message.fft);
+                }
+                // Handle wavelet coherence data messages
+                else if (message.type === 'wavelet_coherence') {
+                    console.log('Received wavelet coherence data:', message);
+                    // Pass only the relevant data properties
+                    const waveletData = {
+                        pair: message.pair,
+                        ch1: message.ch1,
+                        ch2: message.ch2,
+                        coherence: message.coherence,
+                        freqs: message.freqs,
+                        cosine_similarity: message.cosine_similarity
+                    };
+                    updateWaveletCoherenceDisplay(message.stream, waveletData);
+                }
+                // Handle errors
+                else if (message.status === 'error') {
+                    updateStatus('Error: ' + message.message, true);
+                }
+            };
+            
+            websocket.onerror = (error) => {
+                updateStatus('WebSocket error: ' + error, true);
+            };
+            
+            websocket.onclose = () => {
+                updateStatus('WebSocket disconnected', false);
+                document.getElementById('connect-ws-btn').textContent = 'Connect WebSocket';
+            };
+        });
+
+        document.getElementById('subscribe-stream-btn').addEventListener('click', () => {
+            const streamName = document.getElementById('stream-select').value;
+            if (!streamName) {
+                updateStatus('Please select a stream', true);
+                return;
+            }
+
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                updateStatus('WebSocket not connected', true);
+                return;
+            }
+
+            // If already subscribed to a different stream, unsubscribe from it first
+            if (currentlySubscribedStream && currentlySubscribedStream !== streamName) {
+                websocket.send(JSON.stringify({
+                    command: 'unsubscribe',
+                    stream: currentlySubscribedStream
+                }));
+                console.log('Unsubscribed from previous stream:', currentlySubscribedStream);
+            }
+
+            // Subscribe to the new stream
+            websocket.send(JSON.stringify({
+                command: 'subscribe',
+                stream: streamName
+            }));
+
+            updateStatus('Subscribing to: ' + streamName, false);
+        });
+
+        function updateActiveStreamsDisplay() {
+            const activeStreamsContainer = document.getElementById('active-streams');
+            
+            // Only show the currently subscribed stream
+            if (!currentlySubscribedStream || !activeStreamData[currentlySubscribedStream]) {
+                activeStreamsContainer.innerHTML = '<div style="color: #888; font-size: 12px;">No active streams</div>';
+                return;
+            }
+            
+            activeStreamsContainer.innerHTML = '';
+            const streamName = currentlySubscribedStream;
+            const streamEntry = activeStreamData[streamName];
+            const streamItem = document.createElement('div');
+            streamItem.className = 'stream-item';
+            
+            const label = document.createElement('div');
+            label.className = 'stream-item-label';
+            label.textContent = streamName;
+            
+            const details = document.createElement('div');
+            details.className = 'stream-item-details';
+            
+            // Use system clock for last update time to match computer's real time
+            let currentTime = new Date().toLocaleTimeString();
+            let dataPreview = '';
+            if (streamEntry.data && Array.isArray(streamEntry.data) && streamEntry.data.length > 0) {
+                dataPreview = ' (' + streamEntry.data.slice(0, 3).map(v => v.toFixed(2)).join(', ') + (streamEntry.data.length > 3 ? ', ...' : '') + ')';
+            }
+            details.textContent = `Last update: ${currentTime}${dataPreview}`;
+            
+            streamItem.appendChild(label);
+            streamItem.appendChild(details);
+            activeStreamsContainer.appendChild(streamItem);
+        }
+
+        function updateNodeVisualization(streamName, data) {
+            if (data && data.length > 0) {
+                const normalizedValue = Math.min(1, Math.abs(data[0]) / 100);
+                spheres.forEach((sphere) => {
+                    const color = new THREE.Color();
+                    color.setHSL(0.6 - normalizedValue * 0.3, 0.8, 0.5);
+                    sphere.material.color.copy(color);
+                });
+            }
+        }
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('discover-streams-btn').click();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
