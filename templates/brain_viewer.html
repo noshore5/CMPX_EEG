@@ -317,6 +317,12 @@
         <div id="coherence" class="tab-content">
             <div class="control-section">
                 <h3 style="font-size: 14px; margin-top: 0;">Cosine Distance:</h3>
+                <div style="padding: 8px 0;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="normalize-coherence" style="width: 16px; height: 16px; cursor: pointer;">
+                        <span>Normalize to Max</span>
+                    </label>
+                </div>
                 <div id="coherence-container"></div>
             </div>
         </div>
@@ -338,6 +344,16 @@
                 // Activate selected tab
                 e.target.classList.add('active');
                 document.getElementById(tabName).classList.add('active');
+            });
+        });
+        
+        // Add event listener for normalize coherence toggle
+        document.getElementById('normalize-coherence').addEventListener('change', function() {
+            // Update all coherence charts with the new normalization setting
+            Object.keys(coherenceChart).forEach(streamName => {
+                if (coherenceChart[streamName]) {
+                    updateCoherenceChart(streamName);
+                }
             });
         });
         
@@ -436,6 +452,8 @@
                 { label: 'C3', position: [-4, 0, 12.5] },
                 { label: 'C4', position: [4, 0, 12.5] },
                 { label: 'Cz', position: [0, 0, 12.8] },
+                { label: 'T7', position: [-7, 0, 10.5] },
+                { label: 'T8', position: [7, 0, 10.5] },
                 { label: 'P3', position: [-3, -6, 12] },
                 { label: 'P4', position: [3, -6, 12] },
                 { label: 'Pz', position: [0, -6, 12] },
@@ -925,14 +943,15 @@
             // Update the mesh with the new geometry
             mesh.geometry = newTubeGeometry;
             
-            // Create greyscale color: grey when low similarity, white when high similarity
-            // Use HSL with saturation = 0 for pure greyscale
-            // Lightness: 0.25 (dark grey) at 0 similarity, 0.95 (white) at 1 similarity
-            const saturation = 0; // 0 saturation = greyscale
-            const lightness = 0.25 + (normalizedSimilarity * 0.7); // 0.25 -> 0.95
+            // Create orange color with steep gradient: mostly grey until very high similarity
+            // Use non-linear curve to keep low similarities dark/grey
+            const steepCurve = Math.pow(normalizedSimilarity, 3); // Cubic curve for steeper gradient
+            const hue = 30 / 360; // Orange hue (30 degrees)
+            const saturation = steepCurve; // 0 -> 1.0 saturation (stays grey until high similarity)
+            const lightness = 0.2 + (steepCurve * 0.5); // 0.2 -> 0.7 lightness (mostly dark/grey)
             
             const color = new THREE.Color();
-            color.setHSL(0, saturation, lightness); // Hue doesn't matter when saturation is 0
+            color.setHSL(hue, saturation, lightness);
             
             material.color.copy(color);
             material.emissive.copy(color);
@@ -958,11 +977,17 @@
                 return 0;
             });
             
-            // Normalize to highest value to highlight differences
-            const maxSimilarity = Math.max(...similarities);
-            const normalizedSimilarities = maxSimilarity > 0 
-                ? similarities.map(s => s / maxSimilarity)
-                : similarities;
+            // Check if normalization is enabled
+            const normalizeCheckbox = document.getElementById('normalize-coherence');
+            let arcSimilarities = similarities;
+            
+            if (normalizeCheckbox && normalizeCheckbox.checked) {
+                // Normalize to highest value to highlight differences
+                const maxSimilarity = Math.max(...similarities);
+                arcSimilarities = maxSimilarity > 0 
+                    ? similarities.map(s => s / maxSimilarity)
+                    : similarities;
+            }
             
             // Update each arc's brightness
             pairs.forEach((pair, pairIndex) => {
@@ -974,7 +999,7 @@
                 );
                 
                 if (arcIndex !== -1) {
-                    updateArcBrightness(arcIndex, normalizedSimilarities[pairIndex]);
+                    updateArcBrightness(arcIndex, arcSimilarities[pairIndex]);
                 }
             });
         }
@@ -991,7 +1016,7 @@
                 const chartDiv = document.createElement('div');
                 chartDiv.setAttribute('data-stream', streamName);
                 chartDiv.style.width = '100%';
-                chartDiv.style.height = '300px';
+                chartDiv.style.height = '250px';
                 chartDiv.style.marginTop = '10px';
                 
                 const canvas = document.createElement('canvas');
@@ -1086,16 +1111,22 @@
                     return 0;
                 });
                 
-                // Normalize to highest value to highlight differences
-                const maxSimilarity = Math.max(...similarities);
-                const normalizedSimilarities = maxSimilarity > 0 
-                    ? similarities.map(s => s / maxSimilarity)
-                    : similarities;
+                // Check if normalization is enabled
+                const normalizeCheckbox = document.getElementById('normalize-coherence');
+                let displayValues = similarities;
                 
-                chart.data.datasets[0].data = normalizedSimilarities;
+                if (normalizeCheckbox && normalizeCheckbox.checked) {
+                    // Normalize to highest value to highlight differences
+                    const maxSimilarity = Math.max(...similarities);
+                    displayValues = maxSimilarity > 0 
+                        ? similarities.map(s => s / maxSimilarity)
+                        : similarities;
+                }
+                
+                chart.data.datasets[0].data = displayValues;
                 chart.update('none');
                 
-                // Update arc brightness based on cosine similarities
+                // Update arc brightness based on cosine similarities (always use raw values)
                 updateAllArcBrightness(streamName);
             } catch (err) {
                 console.error('Error updating coherence chart:', err);
@@ -1175,7 +1206,7 @@
                     const plotDiv = document.createElement('div');
                     plotDiv.setAttribute('data-wavelet-plot', streamName);
                     plotDiv.style.width = '100%';
-                    plotDiv.style.height = '250px';
+                    plotDiv.style.height = '400px';
                     plotDiv.style.backgroundColor = '#333';
                     plotDiv.style.borderRadius = '4px';
                     
@@ -1208,6 +1239,8 @@
         function renderWaveletCoherenceHeatmap(streamName, waveletData) {
             // Render wavelet coherence as a heatmap using Plotly
             try {
+                console.error('🔴 CODE UPDATE CHECK: renderWaveletCoherenceHeatmap called - code is updated!');
+                
                 const plotDiv = document.querySelector(`[data-wavelet-plot="${streamName}"]`);
                 if (!plotDiv) {
                     console.error('Plot div not found for stream:', streamName);
@@ -1221,33 +1254,52 @@
                     cohLength: waveletData.coherence ? waveletData.coherence.length : 0,
                     cohFirstRow: waveletData.coherence && waveletData.coherence.length > 0 ? waveletData.coherence[0].length : 0,
                     hasFreqs: !!waveletData.freqs,
-                    freqsLength: waveletData.freqs ? waveletData.freqs.length : 0
+                    freqsLength: waveletData.freqs ? waveletData.freqs.length : 0,
+                    hasPhases: !!waveletData.phases,
+                    phasesLength: waveletData.phases ? waveletData.phases.length : 0
                 });
                 
                 const coherenceMatrix = waveletData.coherence;
                 const freqs = waveletData.freqs;
+                const phases = waveletData.phases || null;
                 
                 if (!coherenceMatrix || !freqs || coherenceMatrix.length === 0) {
                     console.error('Invalid data for wavelet coherence:', {coherenceMatrix, freqs});
                     return;
                 }
                 
+                // Validate dimensions: coherence should be (n_freqs, n_time)
+                // If shape doesn't match, transpose it
+                const nFreqs = freqs.length;
+                const nRows = coherenceMatrix.length;
+                const nCols = coherenceMatrix[0] ? coherenceMatrix[0].length : 0;
+                
+                // If rows don't match frequencies, transpose
+                let matrixToPlot = coherenceMatrix;
+                if (nRows !== nFreqs && nCols === nFreqs) {
+                    console.log(`Transposing coherence matrix: (${nRows}x${nCols}) -> (${nCols}x${nRows})`);
+                    matrixToPlot = coherenceMatrix[0].map((_, colIdx) => 
+                        coherenceMatrix.map(row => row[colIdx])
+                    );
+                }
+                
                 // Create time axis based on second dimension (time steps)
                 // coherenceMatrix[freqIndex][timeIndex]
-                const timeSteps = coherenceMatrix[0] ? coherenceMatrix[0].length : 100;
-                const FS = 128; // Sampling frequency
-                const timeAxis = Array.from({length: timeSteps}, (_, i) => (i / FS) * 100);
+                const timeSteps = matrixToPlot[0] ? matrixToPlot[0].length : 100;
+                const timeAxis = Array.from({length: timeSteps}, (_, i) => i); // Use sample indices (0 to 255)
                 
                 console.log('Computed axes:', {
                     timeSteps: timeSteps,
-                    frequencyBins: coherenceMatrix.length,
+                    frequencyBins: matrixToPlot.length,
                     freqLength: freqs.length,
-                    timeAxisLength: timeAxis.length
+                    timeAxisLength: timeAxis.length,
+                    hasPhases: !!phases,
+                    phasesLength: phases ? phases.length : 0
                 });
                 
                 // Create heatmap trace
                 const traces = [{
-                    z: coherenceMatrix,
+                    z: matrixToPlot,
                     x: timeAxis,
                     y: freqs,
                     type: 'heatmap',
@@ -1261,25 +1313,146 @@
                     showscale: true
                 }];
                 
+                // Add phase arrows if phase data is available
+                if (phases && phases.length > 0) {
+                    // Fixed step sizes for good density
+                    const timeStep = 5;  // Show arrows every 5 time steps
+                    
+                    // Calculate frequency step to get uniform y-axis spacing
+                    // Target ~8-10 frequency levels for good density
+                    const targetFreqLevels = 25;
+                    const freqRange = freqs[freqs.length - 1] - freqs[0];
+                    const freqStepSize = freqRange / targetFreqLevels;
+                    
+                    const allDotsX = [];  // All possible locations
+                    const allDotsY = [];
+                    const arrowX = [];
+                    const arrowY = [];
+                    const arrowAngles = [];  // Store actual angles in degrees
+                    
+                    // Build set of target frequencies for uniform spacing
+                    const targetFreqs = new Set();
+                    for (let f = freqs[0]; f <= freqs[freqs.length - 1]; f += freqStepSize) {
+                        targetFreqs.add(parseFloat(f.toFixed(2)));
+                    }
+                    
+                    for (let i = 0; i < freqs.length; i++) {
+                        const freq = freqs[i];
+                        
+                        // Find the closest target frequency
+                        let closestTargetFreq = null;
+                        let minDiff = Infinity;
+                        for (let targetFreq of targetFreqs) {
+                            const diff = Math.abs(freq - targetFreq);
+                            if (diff < minDiff) {
+                                minDiff = diff;
+                                closestTargetFreq = targetFreq;
+                            }
+                        }
+                        
+                        const isTargetFreq = minDiff < freqStepSize * 0.5; // Within half step size
+                        
+                        for (let j = 0; j < timeSteps; j += timeStep) {
+                            if (phases[i] && phases[i][j] !== undefined) {
+                                const phase = phases[i][j];
+                                const coherence = matrixToPlot[i][j];
+                                
+                                // Only add dots and arrows at target frequencies
+                                if (isTargetFreq) {
+                                    allDotsX.push(timeAxis[j]);
+                                    allDotsY.push(freqs[i]);
+                                    
+                                    // Only show arrows at target frequencies with high coherence
+                                    if (coherence > 0.8) {
+                                        arrowX.push(timeAxis[j]);
+                                        arrowY.push(freqs[i]);
+                                        
+                                        // Convert phase from radians to degrees and normalize to 0-360
+                                        let angleDeg = (phase * 180 / Math.PI) % 360;
+                                        if (angleDeg < 0) angleDeg += 360;
+                                        arrowAngles.push(angleDeg);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Add dots at all possible arrow locations (density visualization)
+                    if (allDotsX.length > 0) {
+                        traces.push({
+                            x: allDotsX,
+                            y: allDotsY,
+                            mode: 'markers',
+                            marker: {
+                                symbol: 'circle',
+                                size: 4,
+                                color: 'rgba(150, 150, 150, 0.3)',
+                                line: {width: 0}
+                            },
+                            text: allDotsX.map((_, i) => `Sample ${i}`),
+                            hovertemplate: '%{text}<extra></extra>',
+                            showlegend: false,
+                            name: 'Potential Arrow Locations'
+                        });
+                    }
+                    
+                    console.log(`Phase density: ${allDotsX.length} possible locations (${targetFreqs.size} target freqs), ${arrowX.length} arrows with coherence > 0.8`);
+                    
+                    // Add scatter plot with arrow symbols and proper angles
+                    if (arrowX.length > 0) {
+                        traces.push({
+                            x: arrowX,
+                            y: arrowY,
+                            mode: 'markers',
+                            marker: {
+                                symbol: 'arrow',
+                                size: 14,
+                                color: 'white',
+                                line: {color: 'black', width: 2},
+                                angle: arrowAngles,
+                                angleref: 'previous'
+                            },
+                            text: arrowAngles.map(angle => `Phase: ${angle.toFixed(1)}°`),
+                            hovertemplate: '%{text}<extra></extra>',
+                            showlegend: false,
+                            name: 'Phase'
+                        });
+                    } else {
+                        console.log('No arrows with coherence > 0.8');
+                    }
+                } else {
+                    console.log('No phase data available!!!!!!!');
+                }
+                
                 // Layout configuration matching coherentmultiplex style
                 const layout = {
-                    margin: {l: 60, r: 80, t: 20, b: 60},
+                    title: {
+                        text: `Wavelet Coherence: ${waveletData.pair} (256 samples @ ${waveletData.cosine_similarity.toFixed(3)} similarity)`,
+                        font: {size: 14, color: '#aaa'}
+                    },
+                    margin: {l: 80, r: 80, t: 60, b: 80},
                     paper_bgcolor: '#333',
                     plot_bgcolor: '#333',
-                    font: {color: '#aaa', family: 'Arial, sans-serif'},
+                    font: {color: '#aaa', family: 'Arial, sans-serif', size: 11},
                     xaxis: {
-                        title: 'Time (centiseconds)',
-                        titlefont: {color: '#aaa'},
-                        tickfont: {color: '#aaa'},
+                        title: {
+                            text: `Time (Sample Index, ${timeSteps} samples)`,
+                            font: {color: '#aaa', size: 12}
+                        },
+                        tickfont: {color: '#aaa', size: 10},
                         gridcolor: '#444',
-                        zerolinecolor: '#666'
+                        zerolinecolor: '#666',
+                        zeroline: false
                     },
                     yaxis: {
-                        title: 'Frequency (Hz)',
-                        titlefont: {color: '#aaa'},
-                        tickfont: {color: '#aaa'},
+                        title: {
+                            text: `Frequency (Hz) - ${freqs.length} frequency bins`,
+                            font: {color: '#aaa', size: 12}
+                        },
+                        tickfont: {color: '#aaa', size: 10},
                         gridcolor: '#444',
-                        zerolinecolor: '#666'
+                        zerolinecolor: '#666',
+                        zeroline: false
                     }
                 };
                 
@@ -1501,6 +1674,7 @@
                         ch2: message.ch2,
                         coherence: message.coherence,
                         freqs: message.freqs,
+                        phases: message.phases,
                         cosine_similarity: message.cosine_similarity
                     };
                     updateWaveletCoherenceDisplay(message.stream, waveletData);

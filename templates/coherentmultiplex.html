@@ -328,13 +328,30 @@
             
             // Plot wavelet coherence as heatmap
             if (cohData.coherence && cohData.freqs) {
-                const coherenceMatrix = cohData.coherence;
+                let coherenceMatrix = cohData.coherence;
                 const freqs = cohData.freqs;
                 const phases = cohData.phases || null;
                 
-                // Create time axis (assuming coherence matrix has time as second dimension)
+                // Validate dimensions: coherence should be (n_freqs, n_time)
+                // If shape doesn't match, transpose it
+                const nFreqs = freqs.length;
+                const nRows = coherenceMatrix.length;
+                const nCols = coherenceMatrix[0] ? coherenceMatrix[0].length : 0;
+                
+                // If rows don't match frequencies, transpose
+                if (nRows !== nFreqs && nCols === nFreqs) {
+                    console.log(`Transposing coherence matrix: (${nRows}x${nCols}) -> (${nCols}x${nRows})`);
+                    coherenceMatrix = coherenceMatrix[0].map((_, colIdx) => 
+                        coherenceMatrix.map(row => row[colIdx])
+                    );
+                }
+                
                 const timeSteps = coherenceMatrix[0] ? coherenceMatrix[0].length : 100;
-                const timeAxis = Array.from({length: timeSteps}, (_, i) => (i / FS) * 100);
+                const timeAxis = Array.from({length: timeSteps}, (_, i) => i); // Use sample indices (0 to 255)
+                
+                console.log(`Coherence plot: ${coherenceMatrix.length} frequencies, ${timeSteps} time samples`);
+                console.log(`Time axis: ${timeSteps} samples (0-${timeSteps-1})`);
+                console.log(`Frequency axis: ${freqs.length} frequencies from ${freqs[0]?.toFixed(2)} to ${freqs[freqs.length-1]?.toFixed(2)} Hz`);
                 
                 // Prepare traces - start with heatmap
                 const traces = [{
@@ -412,26 +429,22 @@
                     plot_bgcolor: '#222',
                     font: {color: '#e0e0e0', family: 'Segoe UI,Roboto,Arial,sans-serif'},
                     xaxis: {
-                        title: 'Time (centiseconds)',
+                        title: `Time (Sample Index, ${timeSteps} samples)`,
                         titlefont: {color: '#e0e0e0'},
                         tickfont: {color: '#e0e0e0'},
                         gridcolor: '#444',
                         zerolinecolor: '#666',
-                        range: [timeAxis[0], timeAxis[timeAxis.length - 1]], // Fix x-axis range
-                        tickformat: '.2f',
-                        tick0: 0,
-                        dtick: (timeAxis[timeAxis.length - 1] - timeAxis[0]) / 5 // Show about 5 ticks
+                        range: [0, timeSteps - 1],
+                        tickformat: 'd'
                     },
                     yaxis: {
-                        title: 'Frequency (Hz)',
+                        title: `Frequency (Hz) - ${freqs.length} frequency bins`,
                         titlefont: {color: '#e0e0e0'},
                         tickfont: {color: '#e0e0e0'},
                         gridcolor: '#444',
                         zerolinecolor: '#666',
-                        type: 'log', // Use logarithmic scale to match frequency spacing
-                        range: [Math.log10(freqs[0]), Math.log10(freqs[freqs.length - 1])], // Fix y-axis range for log scale
-                        tickvals: [1, 2, 5, 10, 20, 50], // Explicit tick positions
-                        ticktext: ['1', '2', '5', '10', '20', '50'] // Explicit tick labels
+                        type: 'linear', // Use linear scale
+                        autorange: true
                     },
                     height: 350,
                     width: 776
@@ -442,26 +455,22 @@
                     plot_bgcolor: '#222',
                     font: {color: '#e0e0e0', family: 'Segoe UI,Roboto,Arial,sans-serif'},
                     xaxis: {
-                        title: 'Time (centiseconds)',
+                        title: `Time (Sample Index, ${timeSteps} samples)`,
                         titlefont: {color: '#e0e0e0'},
                         tickfont: {color: '#e0e0e0'},
                         gridcolor: '#444',
                         zerolinecolor: '#666',
-                        range: [timeAxis[0], timeAxis[timeAxis.length - 1]], // Fix x-axis range
-                        tickformat: '.2f',
-                        tick0: 0,
-                        dtick: (timeAxis[timeAxis.length - 1] - timeAxis[0]) / 5 // Show about 5 ticks
+                        range: [0, timeSteps - 1],
+                        tickformat: 'd'
                     },
                     yaxis: {
-                        title: 'Frequency (Hz)',
+                        title: `Frequency (Hz) - ${freqs.length} frequency bins`,
                         titlefont: {color: '#e0e0e0'},
                         tickfont: {color: '#e0e0e0'},
                         gridcolor: '#444',
                         zerolinecolor: '#666',
-                        type: 'log', // Use logarithmic scale to match frequency spacing
-                        range: [Math.log10(freqs[0]), Math.log10(freqs[freqs.length - 1])], // Fix y-axis range for log scale
-                        tickvals: [1, 2, 5, 10, 20, 50], // Explicit tick positions
-                        ticktext: ['1', '2', '5', '10', '20', '50'] // Explicit tick labels
+                        type: 'linear', // Use linear scale
+                        autorange: true
                     },
                     height: 350,
                     width: 776

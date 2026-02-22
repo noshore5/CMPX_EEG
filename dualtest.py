@@ -6,15 +6,8 @@ import signal
 import sys
 import psutil
 import os
-import random
 sys.path.insert(0, '/Users/noahshore/Documents/CoherIQs/CMPX_EEG')
 from utils.signal_utils import generate_signals
-
-# Set fixed seed for reproducible signal generation
-random_seed = 42
-np.random.seed(random_seed)
-random.seed(random_seed)
-print(f"Random seed set to: {random_seed}")
 
 sr = 128
 running = True
@@ -29,14 +22,14 @@ signal.signal(signal.SIGINT, signal_handler)
 info = StreamInfo(
     name='EEG2',
     type='EEG',
-    channel_count=8,
+    channel_count=2,
     nominal_srate=sr,
     channel_format='float32',
     source_id='fake_eeg_001'
 )
 
 # Add channel labels (adjust names as needed)
-labels = ['Fp1','Fp2','F3','F4','C3','C4','P3','P4']
+labels = ['T7','T8']
 ch = info.desc().append_child("channels")
 for lab in labels:
     ch.append_child("channel").append_child_value("label", lab)
@@ -45,7 +38,7 @@ outlet = StreamOutlet(info)
 
 # Generate signal buffer and stream it continuously
 signal_buffer_size = 256  # Seconds of pre-generated signal
-signals = generate_signals(n_signals=8, length=signal_buffer_size, fs=sr).astype(np.float32)
+signals = generate_signals(n_signals=2, length=signal_buffer_size, fs=sr).astype(np.float32)
 sample_idx = 0
 
 # Memory monitoring
@@ -56,7 +49,7 @@ try:
     while running:
         try:
             # Get one sample from each channel
-            sample = [float(signals[i, sample_idx % signal_buffer_size]) for i in range(8)]
+            sample = [float(signals[i, sample_idx % signal_buffer_size]) for i in range(2)]
             outlet.push_sample(sample)
             sample_idx += 1
         except Exception as e:

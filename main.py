@@ -77,6 +77,8 @@ def _init_brain_model():
         'Fp1': [-2, 10, 8],
         'Fp2': [2, 10, 8],
         'Cz': [0, 0, 12],
+        'T7': [-8, -2, 0],
+        'T8': [8, -2, 0],
     }
 
     # Load the transformation matrix to match the model's space
@@ -319,7 +321,7 @@ class StreamBuffer:
     def __init__(self, fft_window_size=256):
         self.buffers = {}  # channel_name -> list of samples
         self.fft_window_size = fft_window_size
-        self.fs = 128  # Default sampling rate (can be updated per stream)
+        self.fs = 128  # Sampling rate for EEG stream
         self.last_wavelet_computation = 0  # Track last wavelet coherence computation time
         self.wavelet_window_size = 256  # Window for wavelet transform (256 samples)
     
@@ -335,7 +337,7 @@ class StreamBuffer:
         
         # Debug: log when we're getting close to ready
         if len(self.buffers[channel_name]) == self.fft_window_size:
-            print(f"StreamBuffer: {channel_name} reached FFT window size ({self.fft_window_size}), is_ready={self.is_ready()}")
+            pass
     
     def is_ready(self):
         """Check if all channels have enough samples for FFT"""
@@ -362,7 +364,6 @@ class StreamBuffer:
         
         # Compute FFT for all channels
         fft_results = compute_fft_multi_channel(fft_input, fs=self.fs, window='hann')
-        print(f"FFT computed: {len(fft_results)} channels, first channel has {len(fft_results[list(fft_results.keys())[0]]['frequencies'])} frequency bins")
         return fft_results
     
     def compute_wavelet_coherence_for_highest_pair(self, fft_data):
@@ -410,8 +411,10 @@ class StreamBuffer:
         
         try:
             # Compute wavelet transform for both signals
-            coeffs1, freqs = transform(signal1, self.fs, highest=50, lowest=0.5, nfreqs=100)
-            coeffs2, freqs = transform(signal2, self.fs, highest=50, lowest=0.5, nfreqs=100)
+            # Use better frequency range for EEG: 0.5 Hz to Nyquist frequency
+            # More frequency bins for better resolution
+            coeffs1, freqs = transform(signal1, self.fs, highest=self.fs/2, lowest=10, nfreqs=150)
+            coeffs2, freqs = transform(signal2, self.fs, highest=self.fs/2, lowest=10, nfreqs=150)
             
             # Compute wavelet coherence
             coh, freqs, S12 = coherence(coeffs1, coeffs2, freqs)
@@ -419,12 +422,15 @@ class StreamBuffer:
             # Handle NaN values
             coh = np.nan_to_num(coh, nan=0.0)
             
+            # Compute phase from cross-spectrum S12
+            phases = np.angle(S12)  # Phase in radians
+            
             # Convert to list format for JSON serialization
             # Replace any NaN or inf values with 0
             freqs_list = [float(f) if np.isfinite(f) else 0.0 for f in (freqs.tolist() if hasattr(freqs, 'tolist') else list(freqs))]
             coh_list = [[float(v) if np.isfinite(v) else 0.0 for v in row] for row in coh]
+            phases_list = [[float(v) if np.isfinite(v) else 0.0 for v in row] for row in phases]
             
-            print(f"Wavelet coherence computed successfully: shape={coh.shape}, freqs={len(freqs_list)}, coh_rows={len(coh_list)}")
             
             return {
                 'pair': f"{ch1}-{ch2}",
@@ -432,6 +438,7 @@ class StreamBuffer:
                 'ch2': ch2,
                 'coherence': coh_list,
                 'freqs': freqs_list,
+                'phases': phases_list,
                 'cosine_similarity': float(max_similarity)
             }
         except Exception as e:
@@ -537,9 +544,6 @@ async def websocket_lsl_endpoint(websocket: WebSocket):
                                             "stream": stream_name,
                                             **wavelet_result
                                         })
-                                        print(f"Sent wavelet coherence for {wavelet_result['pair']}")
-                                    else:
-                                        print(f"Failed to compute wavelet coherence for {stream_name}")
                                 else:
                                     print(f"FFT data not ready for wavelet computation for {stream_name}")
                             except Exception as e:
